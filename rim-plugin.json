@@ -1,0 +1,74 @@
+{
+  "manifest_version": 1,
+  "plugin_id": "chat.rim.releases",
+  "display_name": "Releases",
+  "version": "0.0.1",
+  "author": "RIM team",
+  "runtime_kind": "WebSandboxed",
+  "entrypoint": "main.mjs",
+  "description": "Watches the GitHub releases of public repositories you choose and posts the latest ones into the open conversation. Talks only to GitHub, without a token.",
+  "capabilities": ["ui.panel", "network.fetch", "chat.write"],
+  "network_origins": ["https://api.github.com"],
+  "commands": [
+    {
+      "id": "refresh",
+      "title": "Releases: Refresh",
+      "description": "Fetches the latest releases again.",
+      "keybind_capable": true
+    },
+    {
+      "id": "add_repo",
+      "title": "Releases: Add repository",
+      "description": "Adds a public GitHub repository to the list, at most 10.",
+      "arguments": [
+        {
+          "name": "repo",
+          "type": "string",
+          "required": true,
+          "description": "The repository as owner/name, such as rust-lang/rust."
+        }
+      ]
+    },
+    {
+      "id": "remove_repo",
+      "title": "Releases: Remove repository",
+      "description": "Removes a repository from the list.",
+      "arguments": [
+        {
+          "name": "repo",
+          "type": "string",
+          "required": true,
+          "description": "The repository as owner/name."
+        }
+      ]
+    },
+    {
+      "id": "releases.post",
+      "title": "Releases: Post to this conversation",
+      "description": "Posts the latest release of each repository on the list, or of the one you name, into the open conversation.",
+      "required_context": ["conversation"],
+      "required_capabilities": ["chat.write"],
+      "arguments": [
+        {
+          "name": "repo",
+          "type": "string",
+          "required": false,
+          "description": "One repository on the list, as owner/name; all of them when left out."
+        }
+      ]
+    },
+    {
+      "id": "releases.latest",
+      "title": "Releases: Latest",
+      "description": "Answers the latest release of each repository on the list and refreshes the panel."
+    }
+  ],
+  "panels": [
+    {
+      "id": "releases",
+      "title": "Releases",
+      "description": "The latest releases of the repositories on your list.",
+      "slot": "tool_panel"
+    }
+  ]
+}

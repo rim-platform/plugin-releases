@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Releases</title>
+    <style>
+      /* RIM sends its design tokens as theme.changed; these are the fallbacks. */
+      :root {
+        --color-rim-void: #0d0d0f;
+        --color-rim-panel: #141418;
+        --color-rim-panel-soft: #1a1a20;
+        --color-rim-line: #2a2a33;
+        --color-rim-accent: #8b8bff;
+        --color-rim-warm: #f0b35a;
+        --color-rim-danger: #f06a6a;
+        --color-rim-text: #e0e0e6;
+        --color-rim-text-muted: #a0a0b0;
+        --color-rim-text-faint: #6a6a78;
+        --color-rim-success: #34d399;
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        font-size: 13px;
+        background: var(--color-rim-void);
+        color: var(--color-rim-text);
+      }
+      header {
+        position: sticky;
+        top: 0;
+        display: flex;
+        gap: 0.4rem;
+        align-items: center;
+        padding: 0.6rem 0.75rem;
+        border-bottom: 1px solid var(--color-rim-line);
+        background: var(--color-rim-panel);
+      }
+      input {
+        flex: 1;
+        min-width: 0;
+        height: 1.75rem;
+        padding: 0 0.4rem;
+        border: 1px solid var(--color-rim-line);
+        border-radius: 6px;
+        background: var(--color-rim-void);
+        color: var(--color-rim-text);
+        font: inherit;
+        font-size: 12px;
+      }
+      button {
+        height: 1.75rem;
+        padding: 0 0.6rem;
+        border: 1px solid var(--color-rim-line);
+        border-radius: 6px;
+        background: var(--color-rim-panel-soft);
+        color: var(--color-rim-text);
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      button:hover {
+        border-color: var(--color-rim-accent);
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .banner {
+        margin: 0.75rem;
+        padding: 0.5rem 0.7rem;
+        border: 1px solid var(--color-rim-line);
+        border-left: 3px solid var(--color-rim-warm);
+        border-radius: 6px;
+        background: var(--color-rim-panel);
+        line-height: 1.4;
+      }
+      section {
+        border-bottom: 1px solid var(--color-rim-line);
+      }
+      h2 {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        margin: 0;
+        padding: 0.5rem 0.75rem;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--color-rim-text-muted);
+      }
+      h2 .name {
+        flex: 1;
+        font-family: ui-monospace, monospace;
+      }
+      h2 button {
+        height: 1.4rem;
+        padding: 0 0.4rem;
+      }
+      ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      li,
+      .latest {
+        padding: 0.4rem 0.75rem;
+      }
+      .version {
+        font-family: ui-monospace, monospace;
+        font-weight: 600;
+      }
+      .summary {
+        line-height: 1.35;
+      }
+      .meta {
+        color: var(--color-rim-text-faint);
+        font-size: 11px;
+      }
+      .badge {
+        margin-left: 0.3rem;
+        padding: 0 0.3rem;
+        border: 1px solid var(--color-rim-warm);
+        border-radius: 4px;
+        color: var(--color-rim-warm);
+        font-size: 10px;
+      }
+      details {
+        padding: 0 0.75rem 0.5rem;
+      }
+      summary {
+        color: var(--color-rim-text-muted);
+        font-size: 11px;
+        cursor: pointer;
+      }
+      details li {
+        padding: 0.2rem 0 0.2rem 0.75rem;
+      }
+      .none {
+        padding: 0.3rem 0.75rem 0.6rem;
+        color: var(--color-rim-text-muted);
+      }
+      .error {
+        padding: 0.3rem 0.75rem 0.6rem;
+        color: var(--color-rim-danger);
+      }
+      .empty {
+        padding: 1.5rem 0.75rem;
+        text-align: center;
+        color: var(--color-rim-text-muted);
+      }
+      footer {
+        padding: 0.5rem 0.75rem;
+        color: var(--color-rim-text-faint);
+        font-size: 11px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <input id="repo" placeholder="owner/name (/)" aria-label="Repository to add" />
+      <button id="add" type="button">Add</button>
+      <button id="refresh" type="button" title="Refresh (r)">Refresh</button>
+    </header>
+    <div id="notice" class="banner" role="status" hidden></div>
+    <div id="list"></div>
+    <div id="empty" class="empty">Waiting for the plugin…</div>
+    <footer>
+      <div id="refreshed"></div>
+      <div>
+        Public repositories only, fetched from GitHub without a token, every 10 minutes while this
+        panel is open and at most every 2 minutes when you ask.
+      </div>
+    </footer>
+    <script src="app.js"></script>
+  </body>
+</html>
