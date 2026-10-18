@@ -26,12 +26,57 @@ for three permissions:
   does not ask for `chat.write.encrypted`, so in an encrypted DM or group the app refuses and
   the command says so. It does not ask for `chat.read` and never reads your messages.
 
-It uses no token, so it sees public repositories only. GitHub allows 60 requests an hour per
-IP address without one, so the plugin fetches the list when it starts, every 10 minutes while
-its panel is open, and at most every 2 minutes when you ask; it stops asking and says so when
-GitHub refuses. Your list of repositories is kept in the app's plugin store for your account
-on that device. Until you change it, the list is the four project repositories; a list you
-emptied stays empty.
+Reading its own settings, the optional [GitHub token](#github-token), needs no permission.
+
+GitHub allows 60 requests an hour per IP address without a token, and 5,000 an hour with one,
+so the plugin fetches the list when it starts, every 10 minutes while its panel is open, and at
+most every 2 minutes when you ask; it stops asking and says so when GitHub refuses. Your list
+of repositories is kept in the app's plugin store for your account on that device. Until you
+change it, the list is the four project repositories; a list you emptied stays empty.
+
+## GitHub token
+
+Use a **fine-grained personal access token** with Repository access **Public repositories**
+(read-only) and an **expiry date**. That is all the plugin needs, and it is the only kind of
+token to give it: see the warning about private repositories below.
+
+Without a token the plugin shares GitHub's limit of 60 requests an hour with everything else on
+your network address, and a list of 10 repositories uses 10 of them per refresh. When GitHub
+refuses, the panel says until when and suggests adding a token. The token is a setting of the
+**RIM desktop app** only: the web app keeps no secret settings, so its settings form says the
+token needs the desktop app, and there the plugin always asks GitHub without one.
+
+To add one, on the desktop:
+
+1. On GitHub, open Settings → Developer settings → Personal access tokens → **Fine-grained
+   tokens** → **Generate new token**.
+2. Give it a name and an **expiry date**. Under **Repository access** choose **Public
+   repositories (read-only)**: that is all the plugin reads
+   (`GET /repos/{owner}/{repo}/releases`), and it needs no permissions beyond it.
+3. Generate it and copy it (`github_pat_…`).
+4. In RIM, open the plugin's settings: **Releases Settings** in the side rail's **Plugins**
+   menu, or **Settings** on its row in Settings → Plugins. Paste the token into **GitHub token**
+   and save. The plugin fetches the list again with it straight away.
+
+Keep the token public-only. A token with access to private repositories lets the plugin read their
+releases too, and **Releases: Post to this conversation** would then post a private release's
+tag, title and the first line of its notes into the conversation, where every member sees it.
+
+Where the token goes:
+
+- It is kept in the desktop app's encrypted secret vault, for your account on this device. It
+  is never synced and never sent to the RIM server, and it is deleted when you uninstall the
+  plugin. Once saved, the form only says it is set, with **Replace** and **Clear**.
+- The plugin sends it only to `api.github.com`, as `Authorization: Bearer`. It never keeps it
+  in its store, never logs, shows or posts it, and never puts it in a message or an answer; the
+  panel never receives it.
+- A token with anything but visible ASCII in it (a space, a line break, an accented letter) is
+  never sent, and the plugin does not ask without it either: the panel and every command say
+  the token is not valid and to paste it again or clear it, until you do. When GitHub rejects
+  the token (expired or revoked), the panel says so; replace it in the same form.
+- While the desktop cannot open its secret vault (a locked system keyring), the plugin asks
+  without the token, and when GitHub refuses it says the token could not be read rather than
+  to add one; it reads the token again on the next refresh.
 
 ## What it does
 

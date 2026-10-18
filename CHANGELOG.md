@@ -19,6 +19,26 @@ the version in `rim-plugin.json` and in `package.json`.
 
 ## [Unreleased]
 
+### Added
+
+- A **GitHub token** setting (`github_token`, secret), in the RIM desktop app only. A
+  fine-grained token with read-only access to public repositories raises GitHub's limit from 60
+  to 5,000 requests an hour; it is kept in the app's secret vault on this device and sent only
+  to `api.github.com`. The web app keeps no secret settings, so there the plugin asks without
+  one, as before. Saving, replacing or clearing the token fetches the list again, and a token
+  that is not valid is never sent.
+
+### Changed
+
+- When GitHub's hourly limit is used up, the message suggests adding a token in the plugin's
+  settings. It says instead when the token could not be read (the secret vault is locked), and
+  a token GitHub rejects is named as rejected.
+
+### Fixed
+
+- A repository named `.` or `..`, such as `owner/..`, is refused instead of being asked for at
+  another GitHub path.
+
 ## [0.0.1] - 2026-10-16
 
 ### Added

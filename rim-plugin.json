@@ -6,7 +6,7 @@
   "author": "RIM team",
   "runtime_kind": "WebSandboxed",
   "entrypoint": "main.mjs",
-  "description": "Watches the GitHub releases of public repositories you choose and posts the latest ones into the open conversation. Talks only to GitHub, without a token.",
+  "description": "Watches the GitHub releases of public repositories you choose and posts the latest ones into the open conversation. Talks only to GitHub, with the GitHub token you save in its settings, or without one.",
   "capabilities": ["ui.panel", "network.fetch", "chat.write"],
   "network_origins": ["https://api.github.com"],
   "commands": [
@@ -69,6 +69,16 @@
       "title": "Releases",
       "description": "The latest releases of the repositories on your list.",
       "slot": "tool_panel"
+    }
+  ],
+  "settings_schema": [
+    {
+      "key": "github_token",
+      "title": "GitHub token",
+      "description": "Optional. A fine-grained personal access token with read-only access to public repositories, which raises GitHub's limit from 60 to 5,000 requests an hour. It is kept in this device's secret vault and sent only to api.github.com.",
+      "value_type": "string",
+      "is_secret": true,
+      "placeholder": "github_pat_…"
     }
   ]
 }
