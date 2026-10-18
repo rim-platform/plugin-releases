@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { startTestHost, validateManifest } from "@rim-platform/plugin-sdk/testing";
 
+import { INVALID_TOKEN_MESSAGE } from "./github.ts";
+
 import {
   createPlugin,
   DEFAULT_REPOS,
@@ -227,7 +229,7 @@ describe("releases plugin", () => {
     const t = await started({ stored: ["rim-platform/rim-ui"] });
     const early = await t.host.execute("refresh");
     expect(early.result?.message).toBe(
-      "Fetched less than 2 minutes ago. GitHub allows 60 requests an hour without a token; add one in the plugin's settings (the Plugins menu → Releases Settings, or Settings → Plugins) in the desktop app.",
+      "Fetched less than 2 minutes ago. GitHub allows 60 requests an hour without a token; add one in this plugin's settings in the RIM desktop app (the Plugins menu → Releases Settings, or Settings → Plugins).",
     );
     expect(t.panel().notice).toBe(early.result?.message);
     expect(t.github.requests).toHaveLength(1);
@@ -246,7 +248,7 @@ describe("releases plugin", () => {
     await t.host.handshake();
     await until(() => typeof t.panel()?.notice === "string");
     expect(t.panel().notice).toMatch(
-      /^GitHub refused: the 60 requests an hour it allows without a token are used up\. Try again after \d\d:\d\d, or add a GitHub token in the plugin's settings \(the Plugins menu → Releases Settings, or Settings → Plugins\) in the desktop app\.$/,
+      /^GitHub refused: the 60 requests an hour it allows without a token are used up\. Try again after \d\d:\d\d, or add a GitHub token in this plugin's settings in the RIM desktop app \(the Plugins menu → Releases Settings, or Settings → Plugins\)\.$/,
     );
     expect(t.github.requests).toHaveLength(1);
     t.clock.now += REFRESH_FLOOR_MS;
@@ -551,7 +553,9 @@ describe("releases plugin", () => {
       t.github.limit();
       await t.host.handshake();
       await until(() => typeof t.panel()?.notice === "string");
-      expect(t.panel().notice).toMatch(/add a GitHub token in the plugin's settings/);
+      expect(t.panel().notice).toMatch(
+        /add a GitHub token in this plugin's settings in the RIM desktop app/,
+      );
       expect(t.github.requests).toHaveLength(1);
 
       t.host.changeSettings({ [TOKEN_SETTING]: TOKEN });
@@ -570,7 +574,7 @@ describe("releases plugin", () => {
       await t.host.handshake();
       await until(() => typeof t.panel()?.notice === "string" && !t.panel().loading);
       const rejected =
-        "GitHub rejected the token in the plugin's settings: it may have expired or been revoked. Replace it in the plugin's settings (the Plugins menu → Releases Settings, or Settings → Plugins) in the desktop app.";
+        "GitHub rejected the token in this plugin's settings: it may have expired or been revoked. Replace it in the RIM desktop app (the Plugins menu → Releases Settings, or Settings → Plugins).";
       expect(t.panel().notice).toBe(rejected);
       expect(t.github.requests).toHaveLength(1);
       expect(t.panel().repos.every((r) => r.error === null && r.releases.length === 0)).toBe(true);
@@ -638,6 +642,81 @@ describe("releases plugin", () => {
       // sign-in brings the token the plugin already read.
       expect(t.github.authorizations).toEqual([null, AUTHORIZED]);
       expectTokenKept(t);
+      await t.host.shutdown();
+    });
+
+    it("refuses an invalid token without sending it, and never repeats it", async () => {
+      for (const bad of [`${TOKEN} extra`, `${TOKEN}\nX-Other: 1`, `${TOKEN}é`]) {
+        const t = start({ settings: { [TOKEN_SETTING]: bad } });
+        await t.host.handshake();
+        await until(() => typeof t.panel()?.notice === "string" && !t.panel().loading);
+        expect(t.panel().notice).toBe(INVALID_TOKEN_MESSAGE);
+        expect(t.github.requests).toEqual([]);
+        expect((await t.host.execute("releases.post", CONVERSATION)).error?.message).toBe(
+          `Nothing to post. ${INVALID_TOKEN_MESSAGE}`,
+        );
+        expect((await t.host.execute("refresh")).result?.message).toBe(INVALID_TOKEN_MESSAGE);
+        expect(t.github.requests).toEqual([]);
+        expectTokenKept(t);
+
+        t.host.changeSettings({ [TOKEN_SETTING]: TOKEN });
+        await until(() => t.github.requests.length === DEFAULT_REPOS.length && !t.panel().loading);
+        expect(t.panel().notice).toBeNull();
+        expect(t.github.authorizations).toEqual(DEFAULT_REPOS.map(() => AUTHORIZED));
+        await t.host.shutdown();
+      }
+    });
+
+    it("keeps the token out of the store, the panel, the logs, posts and every answer", async () => {
+      const t = await started({ settings: { [TOKEN_SETTING]: TOKEN } });
+      const answers: unknown[] = [];
+      const run = async (command: string, args: Record<string, unknown> = {}) =>
+        answers.push(await t.host.execute(command, args));
+      await run("add_repo", { repo: "acme/missing" });
+      await run("add_repo", { repo: "owner/.." });
+      await run("remove_repo", { repo: "acme/missing" });
+      await run("refresh");
+      await run("releases.post", CONVERSATION);
+      await run("releases.latest");
+      t.github.reject(TOKEN);
+      t.clock.now += REFRESH_FLOOR_MS;
+      await run("refresh");
+      await run("releases.post", { ...CONVERSATION, repo: "rim-platform/plugin-github-prs" });
+      t.github.reject(null);
+      t.github.limit();
+      t.clock.now += REFRESH_FLOOR_MS;
+      await run("refresh");
+      await run("releases.post", CONVERSATION);
+
+      const seen = {
+        store: [...t.store.values()],
+        panels: t.panels,
+        logs: t.host.logs,
+        posts: t.posts,
+        answers,
+      };
+      expect(seen.store).toEqual([DEFAULT_REPOS]);
+      expect(seen.panels.length).toBeGreaterThan(0);
+      expect(seen.posts.length).toBeGreaterThan(0);
+      for (const [channel, value] of Object.entries(seen)) {
+        const text = JSON.stringify(value);
+        expect(text, channel).not.toContain(TOKEN);
+        expect(text, channel).not.toContain(TOKEN.slice(-12));
+      }
+      expect(JSON.stringify(answers)).toContain("GitHub rejected the token");
+      expectTokenKept(t);
+      await t.host.shutdown();
+    });
+
+    it("refuses . and .. as a repository name", async () => {
+      const t = await started({ settings: { [TOKEN_SETTING]: TOKEN } });
+      for (const repo of ["owner/..", "owner/.", "https://github.com/rim-platform/.."]) {
+        expect((await t.host.execute("add_repo", { repo })).error).toMatchObject({
+          code: -32602,
+        });
+      }
+      expect(t.github.requests).toHaveLength(DEFAULT_REPOS.length);
+      expect(t.store.get("repos")).toBeNull();
       await t.host.shutdown();
     });
   });

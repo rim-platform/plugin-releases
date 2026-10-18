@@ -2,7 +2,14 @@
 // and what each of GitHub's refusals tells the person.
 import { describe, expect, it } from "vitest";
 
-import { fetchReleases, GitHubError, normalizeRepo, parseReleases } from "./github.ts";
+import {
+  credentialsFor,
+  fetchReleases,
+  GitHubError,
+  INVALID_TOKEN_MESSAGE,
+  normalizeRepo,
+  parseReleases,
+} from "./github.ts";
 
 const REPO = "rim-platform/rim-ui";
 
@@ -21,6 +28,39 @@ describe("normalizeRepo", () => {
     expect(normalizeRepo("https://github.com/rim-platform/rim-ui/")).toBe("rim-platform/rim-ui");
     for (const bad of ["rim-ui", "a/b/c", "owner/name.git", "http://github.com/a/b", "", 7, null]) {
       expect(normalizeRepo(bad)).toBeNull();
+    }
+  });
+
+  it("refuses . and .. as a name, which would point the request at another path", () => {
+    for (const bad of ["owner/.", "owner/..", "https://github.com/owner/..", " owner/../ "]) {
+      expect(normalizeRepo(bad)).toBeNull();
+    }
+    expect(normalizeRepo("owner/.github")).toBe("owner/.github");
+    expect(normalizeRepo("owner/...")).toBe("owner/...");
+  });
+});
+
+describe("credentialsFor", () => {
+  it("trims the token and counts an empty one as unset", () => {
+    expect(credentialsFor("  github_pat_abc\n")).toEqual({
+      kind: "token",
+      token: "github_pat_abc",
+    });
+    for (const unset of [undefined, null, "", "  \n", 7]) {
+      expect(credentialsFor(unset)).toEqual({ kind: "none" });
+      expect(credentialsFor(unset, true)).toEqual({ kind: "locked" });
+    }
+  });
+
+  it("calls a token with anything but visible ASCII invalid", () => {
+    for (const bad of [
+      "github_pat_a b",
+      "github_pat_a\nb",
+      "github_pat_á",
+      "tab\there",
+      "x".repeat(1025),
+    ]) {
+      expect(credentialsFor(bad)).toEqual({ kind: "invalid" });
     }
   });
 });
@@ -130,11 +170,25 @@ describe("fetchReleases", () => {
     ]);
   });
 
+  it("refuses an invalid token without asking GitHub", async () => {
+    const github = answer(200, []);
+    const refusal = await fetchReleases(REPO, github.fetch, { kind: "invalid" }).catch(
+      (error: unknown) => error as GitHubError,
+    );
+    expect(refusal).toMatchObject({
+      message:
+        "The GitHub token in this plugin's settings is not valid; paste it again in the RIM desktop app (the Plugins menu → Releases Settings, or Settings → Plugins).",
+      tokenRejected: true,
+    });
+    expect((refusal as GitHubError).message).toBe(INVALID_TOKEN_MESSAGE);
+    expect(github.requests).toEqual([]);
+  });
+
   it("says when the hourly limit is used up, and until when", async () => {
     const refusal = await fetchReleases(REPO, limited().fetch).catch((error: unknown) => error);
     expect(refusal).toBeInstanceOf(GitHubError);
     expect((refusal as GitHubError).message).toBe(
-      `GitHub refused: the 60 requests an hour it allows without a token are used up. Try again after ${at}, or add a GitHub token in the plugin's settings (the Plugins menu → Releases Settings, or Settings → Plugins) in the desktop app.`,
+      `GitHub refused: the 60 requests an hour it allows without a token are used up. Try again after ${at}, or add a GitHub token in this plugin's settings in the RIM desktop app (the Plugins menu → Releases Settings, or Settings → Plugins).`,
     );
     expect((refusal as GitHubError).rateLimitedUntil).toBe(reset);
   });
@@ -162,7 +216,7 @@ describe("fetchReleases", () => {
     );
     expect(refusal).toMatchObject({
       message:
-        "GitHub rejected the token in the plugin's settings: it may have expired or been revoked. Replace it in the plugin's settings (the Plugins menu → Releases Settings, or Settings → Plugins) in the desktop app.",
+        "GitHub rejected the token in this plugin's settings: it may have expired or been revoked. Replace it in the RIM desktop app (the Plugins menu → Releases Settings, or Settings → Plugins).",
       tokenRejected: true,
       rateLimitedUntil: null,
     });

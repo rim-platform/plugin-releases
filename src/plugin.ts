@@ -13,8 +13,10 @@ import {
 } from "@rim-platform/plugin-sdk";
 
 import {
+  credentialsFor,
   fetchReleases,
   GitHubError,
+  INVALID_TOKEN_MESSAGE,
   normalizeRepo,
   TOKEN_SETTING_PLACE,
   type Credentials,
@@ -31,8 +33,6 @@ export const MAX_SUMMARY_LENGTH = 200;
 const STORAGE_KEY = "repos";
 /** The `key` of the secret token setting in `rim-plugin.json`. */
 export const TOKEN_SETTING = "github_token";
-/** What a token can hold: visible ASCII, as an HTTP header value takes it. */
-const TOKEN = /^[\x21-\x7e]{1,1024}$/;
 /** The list a person starts with until they save one of their own: the project's repositories. */
 export const DEFAULT_REPOS: readonly string[] = [
   "rim-platform/rim-ui",
@@ -150,8 +150,8 @@ export function createPlugin(options: PluginOptions = {}) {
   let repos: RepoState[] = [];
   let signedIn = false;
   let fetchedAt: number | null = null;
-  // The GitHub token from the settings, or null; `tokenLocked` while the host
-  // could not read it. `fetchedWith` is the token the last fetch of the list used.
+  // The GitHub token setting as saved, or null, held only here; `tokenLocked` while
+  // the host could not read it. `fetchedWith` is the token the last fetch of the list used.
   let token: string | null = null;
   let tokenLocked = false;
   let fetchedWith: string | null = null;
@@ -177,19 +177,14 @@ export function createPlugin(options: PluginOptions = {}) {
     signedIn,
   });
 
-  const credentials = (): Credentials =>
-    token !== null ? { kind: "token", token } : { kind: tokenLocked ? "locked" : "none" };
+  const credentials = (): Credentials => credentialsFor(token, tokenLocked);
 
   const rateLimited = (): boolean => now() < rateLimitedUntil && rateLimitedFor === token;
 
-  /** Take the token from a settings set; a value that is no token counts as unset. */
-  function applySettings(values: Readonly<Record<string, unknown>>, host: Host): void {
+  /** Take the token from a settings set; an empty one, or one that is not a string, is unset. */
+  function applySettings(values: Readonly<Record<string, unknown>>): void {
     const saved = values[TOKEN_SETTING];
-    const trimmed = typeof saved === "string" ? saved.trim() : "";
-    token = TOKEN.test(trimmed) ? trimmed : null;
-    if (trimmed !== "" && token === null) {
-      host.log.warn("the GitHub token setting is not a token GitHub takes; asking without one");
-    }
+    token = typeof saved === "string" && saved.trim() !== "" ? saved.trim() : null;
   }
 
   /** Read the settings now; without them the plugin asks GitHub without a token. */
@@ -197,7 +192,7 @@ export function createPlugin(options: PluginOptions = {}) {
     try {
       const values = await host.settings.get();
       tokenLocked = false;
-      applySettings(values, host);
+      applySettings(values);
     } catch (error) {
       token = null;
       tokenLocked = secretsLocked(error);
@@ -326,10 +321,13 @@ export function createPlugin(options: PluginOptions = {}) {
     }
     if (fetchedAt !== null && now() - fetchedAt < REFRESH_FLOOR_MS) {
       await fetching;
+      const kind = credentials().kind;
       notice =
-        credentials().kind === "none"
-          ? `Fetched less than 2 minutes ago. GitHub allows 60 requests an hour without a token; add one in ${TOKEN_SETTING_PLACE}.`
-          : "Fetched less than 2 minutes ago.";
+        kind === "invalid"
+          ? INVALID_TOKEN_MESSAGE
+          : kind === "none"
+            ? `Fetched less than 2 minutes ago. GitHub allows 60 requests an hour without a token; add one in ${TOKEN_SETTING_PLACE}.`
+            : "Fetched less than 2 minutes ago.";
       await publish(host);
       return notice;
     }
@@ -476,7 +474,7 @@ export function createPlugin(options: PluginOptions = {}) {
     // fetched with another token is fetched again with this one.
     async onSettingsChanged(values, host) {
       tokenLocked = false;
-      applySettings(values, host);
+      applySettings(values);
       await loaded;
       await fetching;
       if (fetchedAt === null || fetchedWith === token || repos.length === 0) return;

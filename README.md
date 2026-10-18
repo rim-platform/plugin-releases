@@ -38,36 +38,40 @@ change it, the list is the four project repositories; a list you emptied stays e
 
 Without a token the plugin shares GitHub's limit of 60 requests an hour with everything else on
 your network address, and a list of 10 repositories uses 10 of them per refresh. When GitHub
-refuses, the panel says until when and suggests adding a token. To add one, on the desktop:
+refuses, the panel says until when and suggests adding a token. The token is a setting of the
+**RIM desktop app** only: the web app keeps no secret settings, so its settings form says the
+token needs the desktop app, and there the plugin always asks GitHub without one.
+
+To add one, on the desktop:
 
 1. On GitHub, open Settings → Developer settings → Personal access tokens → **Fine-grained
    tokens** → **Generate new token**.
-2. Give it a name and an expiry. Under **Repository access** choose **Public repositories**:
-   that gives read-only access to every public repository, which is all the plugin reads
-   (`GET /repos/{owner}/{repo}/releases`). It needs no permissions beyond that.
+2. Give it a name and an **expiry date**. Under **Repository access** choose **Public
+   repositories (read-only)**: that is all the plugin reads
+   (`GET /repos/{owner}/{repo}/releases`), and it needs no permissions beyond it.
 3. Generate it and copy it (`github_pat_…`).
 4. In RIM, open the plugin's settings: **Releases Settings** in the side rail's **Plugins**
    menu, or **Settings** on its row in Settings → Plugins. Paste the token into **GitHub token**
    and save. The plugin fetches the list again with it straight away.
 
-A token that can read a private repository (**Only select repositories**, with **Contents**
-set to **Read-only**) lets the plugin show that repository's releases too, and **Post to this
-conversation** posts them into the conversation you run it in.
+Use a public-only token. A token with access to private repositories lets the plugin read their
+releases too, and **Releases: Post to this conversation** would then post a private release's
+tag, title and the first line of its notes into the conversation, where every member sees it.
 
 Where the token goes:
 
-- **On the desktop**, it is kept in the app's secret vault, the encrypted store that holds its
-  other secrets, for your account on this device. It is never synced, never sent to the RIM
-  server, and deleted when you uninstall the plugin. Once saved the form only says it is set,
-  with **Replace** and **Clear**.
-- The plugin sends it only to `api.github.com`, as `Authorization: Bearer`, and never logs,
-  shows or posts it. The panel never receives it.
-- **In the web app** there are no secret settings: the form says the token needs the desktop
-  app, and the plugin asks GitHub without one.
+- It is kept in the desktop app's encrypted secret vault, for your account on this device. It
+  is never synced and never sent to the RIM server, and it is deleted when you uninstall the
+  plugin. Once saved, the form only says it is set, with **Replace** and **Clear**.
+- The plugin sends it only to `api.github.com`, as `Authorization: Bearer`. It never keeps it
+  in its store, never logs, shows or posts it, and never puts it in a message or an answer; the
+  panel never receives it.
+- A token with anything but visible ASCII in it (a space, a line break, an accented letter) is
+  never sent: the panel says the token is not valid and to paste it again. When GitHub rejects
+  the token (expired or revoked), the panel says so; replace it in the same form.
 - While the desktop cannot open its secret vault (a locked system keyring), the plugin asks
   without the token, and when GitHub refuses it says the token could not be read rather than
-  to add one; it reads the token again on the next refresh. When GitHub rejects the token
-  (expired or revoked), the panel says so; replace it in the same form.
+  to add one; it reads the token again on the next refresh.
 
 ## What it does
 

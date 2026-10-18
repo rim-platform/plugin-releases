@@ -859,6 +859,13 @@ var browserPlatform = {
 var definePlugin = createDefinePlugin(browserPlatform);
 
 // src/github.ts
+var GITHUB_API = "https://api.github.com";
+var TOKEN = /^[\x21-\x7e]{1,1024}$/;
+function credentialsFor(saved, locked = false) {
+  const token = typeof saved === "string" ? saved.trim() : "";
+  if (token === "") return { kind: locked ? "locked" : "none" };
+  return TOKEN.test(token) ? { kind: "token", token } : { kind: "invalid" };
+}
 var GitHubError = class extends Error {
   rateLimitedUntil;
   tokenRejected;
@@ -869,9 +876,13 @@ var GitHubError = class extends Error {
     this.tokenRejected = tokenRejected;
   }
 };
-var TOKEN_SETTING_PLACE = "the plugin's settings (the Plugins menu \u2192 Releases Settings, or Settings \u2192 Plugins) in the desktop app";
+var SETTINGS_PATH = "the Plugins menu \u2192 Releases Settings, or Settings \u2192 Plugins";
+var TOKEN_SETTING_PLACE = `this plugin's settings in the RIM desktop app (${SETTINGS_PATH})`;
+var INVALID_TOKEN_MESSAGE = `The GitHub token in this plugin's settings is not valid; paste it again in the RIM desktop app (${SETTINGS_PATH}).`;
 function rateLimitMessage(credentials, at) {
   switch (credentials.kind) {
+    case "invalid":
+      return INVALID_TOKEN_MESSAGE;
     case "token":
       return `GitHub refused: the requests an hour it allows with your token are used up. Try again after ${at}.`;
     case "locked":
@@ -884,7 +895,8 @@ var REPO = /^[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}$/;
 function normalizeRepo(value) {
   if (typeof value !== "string") return null;
   const repo = value.trim().replace(/^https:\/\/github\.com\//, "").replace(/\/+$/, "");
-  return REPO.test(repo) && !repo.endsWith(".git") ? repo : null;
+  const name = repo.slice(repo.indexOf("/") + 1);
+  return REPO.test(repo) && !repo.endsWith(".git") && name !== "." && name !== ".." ? repo : null;
 }
 function isRecord2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -925,13 +937,15 @@ function clock(ms) {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 async function fetchReleases(repo, fetchImpl, credentials = { kind: "none" }) {
+  if (credentials.kind === "invalid") throw new GitHubError(INVALID_TOKEN_MESSAGE, null, true);
+  const url = new URL(`${GITHUB_API}/repos/${repo}/releases?per_page=5`);
   const headers = { Accept: "application/vnd.github+json" };
-  if (credentials.kind === "token") headers.Authorization = `Bearer ${credentials.token}`;
+  if (credentials.kind === "token" && url.origin === GITHUB_API) {
+    headers.Authorization = `Bearer ${credentials.token}`;
+  }
   let response;
   try {
-    response = await fetchImpl(`https://api.github.com/repos/${repo}/releases?per_page=5`, {
-      headers
-    });
+    response = await fetchImpl(url.href, { headers });
   } catch {
     throw new GitHubError("GitHub could not be reached.");
   }
@@ -944,7 +958,7 @@ async function fetchReleases(repo, fetchImpl, credentials = { kind: "none" }) {
   }
   if (response.status === 401 && credentials.kind === "token") {
     throw new GitHubError(
-      `GitHub rejected the token in the plugin's settings: it may have expired or been revoked. Replace it in ${TOKEN_SETTING_PLACE}.`,
+      `GitHub rejected the token in this plugin's settings: it may have expired or been revoked. Replace it in the RIM desktop app (${SETTINGS_PATH}).`,
       null,
       true
     );
@@ -965,7 +979,6 @@ var REFRESH_FLOOR_MS = 2 * 60 * 1e3;
 var MAX_SUMMARY_LENGTH = 200;
 var STORAGE_KEY = "repos";
 var TOKEN_SETTING = "github_token";
-var TOKEN = /^[\x21-\x7e]{1,1024}$/;
 var DEFAULT_REPOS = [
   "rim-platform/rim-ui",
   "rim-platform/rim-server",
@@ -1043,21 +1056,17 @@ function createPlugin(options = {}) {
     notice,
     signedIn
   });
-  const credentials = () => token !== null ? { kind: "token", token } : { kind: tokenLocked ? "locked" : "none" };
+  const credentials = () => credentialsFor(token, tokenLocked);
   const rateLimited = () => now() < rateLimitedUntil && rateLimitedFor === token;
-  function applySettings(values, host) {
+  function applySettings(values) {
     const saved = values[TOKEN_SETTING];
-    const trimmed = typeof saved === "string" ? saved.trim() : "";
-    token = TOKEN.test(trimmed) ? trimmed : null;
-    if (trimmed !== "" && token === null) {
-      host.log.warn("the GitHub token setting is not a token GitHub takes; asking without one");
-    }
+    token = typeof saved === "string" && saved.trim() !== "" ? saved.trim() : null;
   }
   async function readSettings(host) {
     try {
       const values = await host.settings.get();
       tokenLocked = false;
-      applySettings(values, host);
+      applySettings(values);
     } catch (error) {
       token = null;
       tokenLocked = secretsLocked(error);
@@ -1161,7 +1170,8 @@ function createPlugin(options = {}) {
     }
     if (fetchedAt !== null && now() - fetchedAt < REFRESH_FLOOR_MS) {
       await fetching;
-      notice = credentials().kind === "none" ? `Fetched less than 2 minutes ago. GitHub allows 60 requests an hour without a token; add one in ${TOKEN_SETTING_PLACE}.` : "Fetched less than 2 minutes ago.";
+      const kind = credentials().kind;
+      notice = kind === "invalid" ? INVALID_TOKEN_MESSAGE : kind === "none" ? `Fetched less than 2 minutes ago. GitHub allows 60 requests an hour without a token; add one in ${TOKEN_SETTING_PLACE}.` : "Fetched less than 2 minutes ago.";
       await publish(host);
       return notice;
     }
@@ -1298,7 +1308,7 @@ function createPlugin(options = {}) {
     // fetched with another token is fetched again with this one.
     async onSettingsChanged(values, host) {
       tokenLocked = false;
-      applySettings(values, host);
+      applySettings(values);
       await loaded;
       await fetching;
       if (fetchedAt === null || fetchedWith === token || repos.length === 0) return;

@@ -19,19 +19,38 @@ export interface Release {
   prerelease: boolean;
 }
 
+/** The only origin the plugin sends the token to. */
+export const GITHUB_API = "https://api.github.com";
+
 /**
- * How the plugin asks GitHub: with the token from its settings, without one, or
- * without one because the host could not read the saved token (its secret vault is
- * locked). Only `token` sends anything; the other two differ in what a refusal says.
+ * How the plugin asks GitHub: with the token from its settings; not at all, because
+ * the saved token is not one an HTTP header can carry; without one; or without one
+ * because the host could not read the saved token (its secret vault is locked).
+ * Only `token` sends anything; the others differ in what a refusal says.
  */
 export type Credentials =
   | { readonly kind: "token"; readonly token: string }
+  | { readonly kind: "invalid" }
   | { readonly kind: "none" }
   | { readonly kind: "locked" };
 
+/** What a token can hold: visible ASCII, as an HTTP header value takes it. */
+const TOKEN = /^[\x21-\x7e]{1,1024}$/;
+
+/**
+ * The credentials for a saved token setting: trimmed, unset when empty or not a
+ * string, and `invalid` when it holds anything but visible ASCII.
+ */
+export function credentialsFor(saved: unknown, locked = false): Credentials {
+  const token = typeof saved === "string" ? saved.trim() : "";
+  if (token === "") return { kind: locked ? "locked" : "none" };
+  return TOKEN.test(token) ? { kind: "token", token } : { kind: "invalid" };
+}
+
 /**
  * GitHub said no. `rateLimitedUntil` is set when the hourly limit is used up, and
- * `tokenRejected` when GitHub refused the token: both hold for every repository.
+ * `tokenRejected` when the token cannot be used, as GitHub or the plugin found:
+ * both hold for every repository.
  */
 export class GitHubError extends Error {
   readonly rateLimitedUntil: number | null;
@@ -45,13 +64,20 @@ export class GitHubError extends Error {
   }
 }
 
+/** Where the plugin's settings open in the desktop app. */
+const SETTINGS_PATH = "the Plugins menu → Releases Settings, or Settings → Plugins";
+
 /** Where the user saves the token, as the refusals name it. */
-export const TOKEN_SETTING_PLACE =
-  "the plugin's settings (the Plugins menu → Releases Settings, or Settings → Plugins) in the desktop app";
+export const TOKEN_SETTING_PLACE = `this plugin's settings in the RIM desktop app (${SETTINGS_PATH})`;
+
+/** The refusal for a saved token that is not one; it never repeats the value. */
+export const INVALID_TOKEN_MESSAGE = `The GitHub token in this plugin's settings is not valid; paste it again in the RIM desktop app (${SETTINGS_PATH}).`;
 
 /** The message for an hourly limit that is used up until `at`, by how the plugin asked. */
 function rateLimitMessage(credentials: Credentials, at: string): string {
   switch (credentials.kind) {
+    case "invalid":
+      return INVALID_TOKEN_MESSAGE;
     case "token":
       return `GitHub refused: the requests an hour it allows with your token are used up. Try again after ${at}.`;
     case "locked":
@@ -77,7 +103,8 @@ export function normalizeRepo(value: unknown): string | null {
     .trim()
     .replace(/^https:\/\/github\.com\//, "")
     .replace(/\/+$/, "");
-  return REPO.test(repo) && !repo.endsWith(".git") ? repo : null;
+  const name = repo.slice(repo.indexOf("/") + 1);
+  return REPO.test(repo) && !repo.endsWith(".git") && name !== "." && name !== ".." ? repo : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -139,20 +166,23 @@ function clock(ms: number): string {
 
 /**
  * Fetch the latest published releases of `repo`, newest first, with `Authorization:
- * Bearer` when `credentials` holds a token. No message names the token.
+ * Bearer` when `credentials` holds a token and the request goes to {@link GITHUB_API}.
+ * An invalid token is refused before anything is sent. No message names the token.
  */
 export async function fetchReleases(
   repo: string,
   fetchImpl: typeof fetch,
   credentials: Credentials = { kind: "none" },
 ): Promise<Release[]> {
+  if (credentials.kind === "invalid") throw new GitHubError(INVALID_TOKEN_MESSAGE, null, true);
+  const url = new URL(`${GITHUB_API}/repos/${repo}/releases?per_page=5`);
   const headers: Record<string, string> = { Accept: "application/vnd.github+json" };
-  if (credentials.kind === "token") headers.Authorization = `Bearer ${credentials.token}`;
+  if (credentials.kind === "token" && url.origin === GITHUB_API) {
+    headers.Authorization = `Bearer ${credentials.token}`;
+  }
   let response: Response;
   try {
-    response = await fetchImpl(`https://api.github.com/repos/${repo}/releases?per_page=5`, {
-      headers,
-    });
+    response = await fetchImpl(url.href, { headers });
   } catch {
     throw new GitHubError("GitHub could not be reached.");
   }
@@ -168,7 +198,7 @@ export async function fetchReleases(
   }
   if (response.status === 401 && credentials.kind === "token") {
     throw new GitHubError(
-      `GitHub rejected the token in the plugin's settings: it may have expired or been revoked. Replace it in ${TOKEN_SETTING_PLACE}.`,
+      `GitHub rejected the token in this plugin's settings: it may have expired or been revoked. Replace it in the RIM desktop app (${SETTINGS_PATH}).`,
       null,
       true,
     );
