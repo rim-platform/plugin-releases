@@ -13,6 +13,7 @@ import {
   PANEL_ID,
   REFRESH_FLOOR_MS,
   TOKEN_SETTING,
+  UNREADABLE_RELEASES_MESSAGE,
   type LatestRelease,
   type PanelState,
 } from "./plugin.ts";
@@ -107,6 +108,7 @@ function fakeGitHub(): FakeGitHub {
       });
     }
     const repo = /repos\/([^/]+\/[^/]+)\/releases\?per_page=5$/.exec(url)?.[1] ?? "";
+    if (repo === "acme/garbled") return new Response("<html>not json</html>", { status: 200 });
     const releases = RELEASES[repo];
     return releases ? Response.json(releases) : new Response("{}", { status: 404 });
   }) as typeof fetch;
@@ -145,6 +147,7 @@ function start(options: StartOptions = {}) {
   const github = fakeGitHub();
   const clock = { now: T0 };
   const store = new Map<string, unknown>([["repos", options.stored ?? null]]);
+  const storeWrites: unknown[] = [];
   const panels: PanelState[] = [];
   const posts: PostParams[] = [];
   const host = startTestHost(createPlugin({ fetch: github.fetch, now: () => clock.now }), {
@@ -157,6 +160,7 @@ function start(options: StartOptions = {}) {
       const p = params as { key: string; value?: unknown; panel_id: string; state: PanelState };
       if (method === "rim.storage.get") return { value: store.get(p.key) ?? null };
       if (method === "rim.storage.set") {
+        storeWrites.push(params);
         store.set(p.key, p.value);
         return { ok: true };
       }
@@ -173,7 +177,16 @@ function start(options: StartOptions = {}) {
       return { ok: true };
     },
   });
-  return { host, github, clock, store, panels, posts, panel: () => panels.at(-1) as PanelState };
+  return {
+    host,
+    github,
+    clock,
+    store,
+    storeWrites,
+    panels,
+    posts,
+    panel: () => panels.at(-1) as PanelState,
+  };
 }
 
 async function until(check: () => boolean) {
@@ -656,13 +669,25 @@ describe("releases plugin", () => {
           `Nothing to post. ${INVALID_TOKEN_MESSAGE}`,
         );
         expect((await t.host.execute("refresh")).result?.message).toBe(INVALID_TOKEN_MESSAGE);
+        // It stays refused, without asking unauthenticated either, until the setting changes.
+        t.clock.now += REFRESH_FLOOR_MS;
+        expect((await t.host.execute("refresh")).result?.message).toBe(INVALID_TOKEN_MESSAGE);
+        expect((await t.host.execute("releases.latest")).result?.message).toBe(
+          INVALID_TOKEN_MESSAGE,
+        );
+        expect((await t.host.execute("add_repo", { repo: "acme/new" })).result?.message).toBe(
+          INVALID_TOKEN_MESSAGE,
+        );
         expect(t.github.requests).toEqual([]);
+        expect(t.posts).toEqual([]);
         expectTokenKept(t);
 
         t.host.changeSettings({ [TOKEN_SETTING]: TOKEN });
-        await until(() => t.github.requests.length === DEFAULT_REPOS.length && !t.panel().loading);
+        await until(() => t.github.requests.length === 5 && !t.panel().loading);
         expect(t.panel().notice).toBeNull();
-        expect(t.github.authorizations).toEqual(DEFAULT_REPOS.map(() => AUTHORIZED));
+        expect(t.github.authorizations).toEqual(
+          [...DEFAULT_REPOS, "acme/new"].map(() => AUTHORIZED),
+        );
         await t.host.shutdown();
       }
     });
@@ -673,8 +698,10 @@ describe("releases plugin", () => {
       const run = async (command: string, args: Record<string, unknown> = {}) =>
         answers.push(await t.host.execute(command, args));
       await run("add_repo", { repo: "acme/missing" });
+      await run("add_repo", { repo: "acme/garbled" });
       await run("add_repo", { repo: "owner/.." });
       await run("remove_repo", { repo: "acme/missing" });
+      await run("remove_repo", { repo: "acme/garbled" });
       await run("refresh");
       await run("releases.post", CONVERSATION);
       await run("releases.latest");
@@ -689,13 +716,14 @@ describe("releases plugin", () => {
       await run("releases.post", CONVERSATION);
 
       const seen = {
-        store: [...t.store.values()],
+        store: t.storeWrites,
         panels: t.panels,
         logs: t.host.logs,
         posts: t.posts,
         answers,
       };
-      expect(seen.store).toEqual([DEFAULT_REPOS]);
+      expect(seen.store).toHaveLength(4);
+      expect(t.store.get("repos")).toEqual(DEFAULT_REPOS);
       expect(seen.panels.length).toBeGreaterThan(0);
       expect(seen.posts.length).toBeGreaterThan(0);
       for (const [channel, value] of Object.entries(seen)) {
@@ -704,6 +732,14 @@ describe("releases plugin", () => {
         expect(text, channel).not.toContain(TOKEN.slice(-12));
       }
       expect(JSON.stringify(answers)).toContain("GitHub rejected the token");
+      expectTokenKept(t);
+      await t.host.shutdown();
+    });
+
+    it("shows a fixed message when GitHub's answer cannot be read", async () => {
+      const t = await started({ stored: ["acme/garbled"], settings: { [TOKEN_SETTING]: TOKEN } });
+      expect(t.panel().repos[0].error).toBe(UNREADABLE_RELEASES_MESSAGE);
+      expect(JSON.stringify(t.host.frames)).not.toMatch(/JSON|Unexpected token|SyntaxError/);
       expectTokenKept(t);
       await t.host.shutdown();
     });

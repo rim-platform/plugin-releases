@@ -36,6 +36,10 @@ change it, the list is the four project repositories; a list you emptied stays e
 
 ## GitHub token
 
+Use a **fine-grained personal access token** with Repository access **Public repositories**
+(read-only) and an **expiry date**. That is all the plugin needs, and it is the only kind of
+token to give it: see the warning about private repositories below.
+
 Without a token the plugin shares GitHub's limit of 60 requests an hour with everything else on
 your network address, and a list of 10 repositories uses 10 of them per refresh. When GitHub
 refuses, the panel says until when and suggests adding a token. The token is a setting of the
@@ -54,7 +58,7 @@ To add one, on the desktop:
    menu, or **Settings** on its row in Settings → Plugins. Paste the token into **GitHub token**
    and save. The plugin fetches the list again with it straight away.
 
-Use a public-only token. A token with access to private repositories lets the plugin read their
+Keep the token public-only. A token with access to private repositories lets the plugin read their
 releases too, and **Releases: Post to this conversation** would then post a private release's
 tag, title and the first line of its notes into the conversation, where every member sees it.
 
@@ -67,7 +71,8 @@ Where the token goes:
   in its store, never logs, shows or posts it, and never puts it in a message or an answer; the
   panel never receives it.
 - A token with anything but visible ASCII in it (a space, a line break, an accented letter) is
-  never sent: the panel says the token is not valid and to paste it again. When GitHub rejects
+  never sent, and the plugin does not ask without it either: the panel and every command say
+  the token is not valid and to paste it again or clear it, until you do. When GitHub rejects
   the token (expired or revoked), the panel says so; replace it in the same form.
 - While the desktop cannot open its secret vault (a locked system keyring), the plugin asks
   without the token, and when GitHub refuses it says the token could not be read rather than

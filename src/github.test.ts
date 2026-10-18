@@ -9,6 +9,7 @@ import {
   INVALID_TOKEN_MESSAGE,
   normalizeRepo,
   parseReleases,
+  requestHeaders,
 } from "./github.ts";
 
 const REPO = "rim-platform/rim-ui";
@@ -129,6 +130,37 @@ describe("parseReleases", () => {
   });
 });
 
+describe("requestHeaders", () => {
+  const credentials = { kind: "token", token: "github_pat_abc" } as const;
+
+  it("adds the bearer token only for https://api.github.com", () => {
+    expect(
+      requestHeaders(new URL("https://api.github.com/repos/a/b/releases"), credentials),
+    ).toEqual({
+      Accept: "application/vnd.github+json",
+      Authorization: "Bearer github_pat_abc",
+    });
+    for (const elsewhere of [
+      "http://api.github.com/repos/a/b/releases",
+      "https://api.github.com:8443/repos/a/b/releases",
+      "https://api.github.com.evil.example/repos/a/b/releases",
+      "https://evil.example/https://api.github.com/",
+      "https://github.com/a/b/releases",
+    ]) {
+      expect(requestHeaders(new URL(elsewhere), credentials)).toEqual({
+        Accept: "application/vnd.github+json",
+      });
+    }
+  });
+
+  it("adds no token without one", () => {
+    const url = new URL("https://api.github.com/repos/a/b/releases");
+    for (const kind of ["none", "locked", "invalid"] as const) {
+      expect(requestHeaders(url, { kind })).toEqual({ Accept: "application/vnd.github+json" });
+    }
+  });
+});
+
 describe("fetchReleases", () => {
   const TOKEN = "github_pat_11ABCDEFG0123456789_secretpart";
   const reset = Date.parse("2026-10-16T13:05:00Z");
@@ -177,7 +209,7 @@ describe("fetchReleases", () => {
     );
     expect(refusal).toMatchObject({
       message:
-        "The GitHub token in this plugin's settings is not valid; paste it again in the RIM desktop app (the Plugins menu → Releases Settings, or Settings → Plugins).",
+        "The GitHub token in this plugin's settings is not valid; paste it again or clear it in the RIM desktop app (the Plugins menu → Releases Settings, or Settings → Plugins).",
       tokenRejected: true,
     });
     expect((refusal as GitHubError).message).toBe(INVALID_TOKEN_MESSAGE);

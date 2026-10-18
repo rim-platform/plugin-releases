@@ -71,7 +71,7 @@ const SETTINGS_PATH = "the Plugins menu → Releases Settings, or Settings → P
 export const TOKEN_SETTING_PLACE = `this plugin's settings in the RIM desktop app (${SETTINGS_PATH})`;
 
 /** The refusal for a saved token that is not one; it never repeats the value. */
-export const INVALID_TOKEN_MESSAGE = `The GitHub token in this plugin's settings is not valid; paste it again in the RIM desktop app (${SETTINGS_PATH}).`;
+export const INVALID_TOKEN_MESSAGE = `The GitHub token in this plugin's settings is not valid; paste it again or clear it in the RIM desktop app (${SETTINGS_PATH}).`;
 
 /** The message for an hourly limit that is used up until `at`, by how the plugin asked. */
 function rateLimitMessage(credentials: Credentials, at: string): string {
@@ -165,9 +165,21 @@ function clock(ms: number): string {
 }
 
 /**
- * Fetch the latest published releases of `repo`, newest first, with `Authorization:
- * Bearer` when `credentials` holds a token and the request goes to {@link GITHUB_API}.
- * An invalid token is refused before anything is sent. No message names the token.
+ * The headers of a request to `url`: `Authorization: Bearer` only when `credentials`
+ * hold a token and `url`'s origin is exactly {@link GITHUB_API}.
+ */
+export function requestHeaders(url: URL, credentials: Credentials): Record<string, string> {
+  const headers: Record<string, string> = { Accept: "application/vnd.github+json" };
+  if (credentials.kind === "token" && url.origin === GITHUB_API) {
+    headers.Authorization = `Bearer ${credentials.token}`;
+  }
+  return headers;
+}
+
+/**
+ * Fetch the latest published releases of `repo`, newest first, with the headers of
+ * {@link requestHeaders}. An invalid token is refused before anything is sent. No
+ * message names the token.
  */
 export async function fetchReleases(
   repo: string,
@@ -176,13 +188,9 @@ export async function fetchReleases(
 ): Promise<Release[]> {
   if (credentials.kind === "invalid") throw new GitHubError(INVALID_TOKEN_MESSAGE, null, true);
   const url = new URL(`${GITHUB_API}/repos/${repo}/releases?per_page=5`);
-  const headers: Record<string, string> = { Accept: "application/vnd.github+json" };
-  if (credentials.kind === "token" && url.origin === GITHUB_API) {
-    headers.Authorization = `Bearer ${credentials.token}`;
-  }
   let response: Response;
   try {
-    response = await fetchImpl(url.href, { headers });
+    response = await fetchImpl(url.href, { headers: requestHeaders(url, credentials) });
   } catch {
     throw new GitHubError("GitHub could not be reached.");
   }

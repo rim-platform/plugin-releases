@@ -31,6 +31,8 @@ export const REFRESH_FLOOR_MS = 2 * 60 * 1000;
 /** The longest text of the line under a posted release's title. */
 export const MAX_SUMMARY_LENGTH = 200;
 const STORAGE_KEY = "repos";
+/** What a repository shows when reading its releases failed in an unexpected way. */
+export const UNREADABLE_RELEASES_MESSAGE = "The releases could not be read.";
 /** The `key` of the secret token setting in `rim-plugin.json`. */
 export const TOKEN_SETTING = "github_token";
 /** The list a person starts with until they save one of their own: the project's repositories. */
@@ -270,7 +272,8 @@ export function createPlugin(options: PluginOptions = {}) {
         target.releases = await fetchReleases(target.repo, fetchImpl, asked);
         target.error = null;
       } catch (error) {
-        const refusal = error instanceof GitHubError ? error : new GitHubError(String(error));
+        const refusal =
+          error instanceof GitHubError ? error : new GitHubError(UNREADABLE_RELEASES_MESSAGE);
         if (refusal.rateLimitedUntil !== null) {
           rateLimitedUntil = refusal.rateLimitedUntil;
           rateLimitedFor = asked.kind === "token" ? asked.token : null;

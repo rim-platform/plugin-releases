@@ -878,7 +878,7 @@ var GitHubError = class extends Error {
 };
 var SETTINGS_PATH = "the Plugins menu \u2192 Releases Settings, or Settings \u2192 Plugins";
 var TOKEN_SETTING_PLACE = `this plugin's settings in the RIM desktop app (${SETTINGS_PATH})`;
-var INVALID_TOKEN_MESSAGE = `The GitHub token in this plugin's settings is not valid; paste it again in the RIM desktop app (${SETTINGS_PATH}).`;
+var INVALID_TOKEN_MESSAGE = `The GitHub token in this plugin's settings is not valid; paste it again or clear it in the RIM desktop app (${SETTINGS_PATH}).`;
 function rateLimitMessage(credentials, at) {
   switch (credentials.kind) {
     case "invalid":
@@ -936,16 +936,19 @@ function clock(ms) {
   const date = new Date(ms);
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
-async function fetchReleases(repo, fetchImpl, credentials = { kind: "none" }) {
-  if (credentials.kind === "invalid") throw new GitHubError(INVALID_TOKEN_MESSAGE, null, true);
-  const url = new URL(`${GITHUB_API}/repos/${repo}/releases?per_page=5`);
+function requestHeaders(url, credentials) {
   const headers = { Accept: "application/vnd.github+json" };
   if (credentials.kind === "token" && url.origin === GITHUB_API) {
     headers.Authorization = `Bearer ${credentials.token}`;
   }
+  return headers;
+}
+async function fetchReleases(repo, fetchImpl, credentials = { kind: "none" }) {
+  if (credentials.kind === "invalid") throw new GitHubError(INVALID_TOKEN_MESSAGE, null, true);
+  const url = new URL(`${GITHUB_API}/repos/${repo}/releases?per_page=5`);
   let response;
   try {
-    response = await fetchImpl(url.href, { headers });
+    response = await fetchImpl(url.href, { headers: requestHeaders(url, credentials) });
   } catch {
     throw new GitHubError("GitHub could not be reached.");
   }
@@ -978,6 +981,7 @@ var MAX_REPOS = 10;
 var REFRESH_FLOOR_MS = 2 * 60 * 1e3;
 var MAX_SUMMARY_LENGTH = 200;
 var STORAGE_KEY = "repos";
+var UNREADABLE_RELEASES_MESSAGE = "The releases could not be read.";
 var TOKEN_SETTING = "github_token";
 var DEFAULT_REPOS = [
   "rim-platform/rim-ui",
@@ -1126,7 +1130,7 @@ function createPlugin(options = {}) {
         target.releases = await fetchReleases(target.repo, fetchImpl, asked);
         target.error = null;
       } catch (error) {
-        const refusal = error instanceof GitHubError ? error : new GitHubError(String(error));
+        const refusal = error instanceof GitHubError ? error : new GitHubError(UNREADABLE_RELEASES_MESSAGE);
         if (refusal.rateLimitedUntil !== null) {
           rateLimitedUntil = refusal.rateLimitedUntil;
           rateLimitedFor = asked.kind === "token" ? asked.token : null;
