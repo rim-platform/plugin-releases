@@ -1,5 +1,6 @@
-// The GitHub REST API calls of the plugin: the latest releases of a public
-// repository, without a token, and what GitHub's refusals mean for a person.
+// The GitHub REST API calls of the plugin: the latest releases of a repository,
+// with the user's token when they saved one, and what GitHub's refusals mean
+// for a person.
 
 /** One published release, as the panel shows it and the plugin posts it. */
 export interface Release {
@@ -18,14 +19,52 @@ export interface Release {
   prerelease: boolean;
 }
 
-/** GitHub said no; `rateLimitedUntil` is set when the hourly limit is used up. */
+/**
+ * How the plugin asks GitHub: with the token from its settings, without one, or
+ * without one because the host could not read the saved token (its secret vault is
+ * locked). Only `token` sends anything; the other two differ in what a refusal says.
+ */
+export type Credentials =
+  | { readonly kind: "token"; readonly token: string }
+  | { readonly kind: "none" }
+  | { readonly kind: "locked" };
+
+/**
+ * GitHub said no. `rateLimitedUntil` is set when the hourly limit is used up, and
+ * `tokenRejected` when GitHub refused the token: both hold for every repository.
+ */
 export class GitHubError extends Error {
   readonly rateLimitedUntil: number | null;
+  readonly tokenRejected: boolean;
 
-  constructor(message: string, rateLimitedUntil: number | null = null) {
+  constructor(message: string, rateLimitedUntil: number | null = null, tokenRejected = false) {
     super(message);
     this.name = "GitHubError";
     this.rateLimitedUntil = rateLimitedUntil;
+    this.tokenRejected = tokenRejected;
+  }
+}
+
+/** Where the user saves the token, as the refusals name it. */
+export const TOKEN_SETTING_PLACE =
+  "the plugin's settings (the Plugins menu → Releases Settings, or Settings → Plugins) in the desktop app";
+
+/** The message for an hourly limit that is used up until `at`, by how the plugin asked. */
+function rateLimitMessage(credentials: Credentials, at: string): string {
+  switch (credentials.kind) {
+    case "token":
+      return `GitHub refused: the requests an hour it allows with your token are used up. Try again after ${at}.`;
+    case "locked":
+      return (
+        "GitHub refused: the 60 requests an hour it allows without a token are used up, and " +
+        "the plugin could not read your GitHub token because the app's secret vault is locked; " +
+        `unlock your system keyring. Try again after ${at}.`
+      );
+    case "none":
+      return (
+        "GitHub refused: the 60 requests an hour it allows without a token are used up. " +
+        `Try again after ${at}, or add a GitHub token in ${TOKEN_SETTING_PLACE}.`
+      );
   }
 }
 
@@ -98,12 +137,21 @@ function clock(ms: number): string {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
-/** Fetch the latest published releases of `repo`, newest first. */
-export async function fetchReleases(repo: string, fetchImpl: typeof fetch): Promise<Release[]> {
+/**
+ * Fetch the latest published releases of `repo`, newest first, with `Authorization:
+ * Bearer` when `credentials` holds a token. No message names the token.
+ */
+export async function fetchReleases(
+  repo: string,
+  fetchImpl: typeof fetch,
+  credentials: Credentials = { kind: "none" },
+): Promise<Release[]> {
+  const headers: Record<string, string> = { Accept: "application/vnd.github+json" };
+  if (credentials.kind === "token") headers.Authorization = `Bearer ${credentials.token}`;
   let response: Response;
   try {
     response = await fetchImpl(`https://api.github.com/repos/${repo}/releases?per_page=5`, {
-      headers: { Accept: "application/vnd.github+json" },
+      headers,
     });
   } catch {
     throw new GitHubError("GitHub could not be reached.");
@@ -116,11 +164,21 @@ export async function fetchReleases(repo: string, fetchImpl: typeof fetch): Prom
   ) {
     const reset = Number(response.headers.get("x-ratelimit-reset"));
     const until = Number.isFinite(reset) && reset > 0 ? reset * 1000 : Date.now() + 60 * 60 * 1000;
+    throw new GitHubError(rateLimitMessage(credentials, clock(until)), until);
+  }
+  if (response.status === 401 && credentials.kind === "token") {
     throw new GitHubError(
-      `GitHub refused: the 60 requests an hour it allows without a token are used up. Try again after ${clock(until)}.`,
-      until,
+      `GitHub rejected the token in the plugin's settings: it may have expired or been revoked. Replace it in ${TOKEN_SETTING_PLACE}.`,
+      null,
+      true,
     );
   }
-  if (response.status === 404) throw new GitHubError(`${repo} was not found, or it is private.`);
+  if (response.status === 404) {
+    throw new GitHubError(
+      credentials.kind === "token"
+        ? `${repo} was not found, or your token cannot read it.`
+        : `${repo} was not found, or it is private.`,
+    );
+  }
   throw new GitHubError(`GitHub answered ${response.status} for ${repo}.`);
 }

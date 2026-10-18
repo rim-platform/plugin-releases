@@ -1,8 +1,8 @@
 // The Releases plugin: a WebSandboxed plugin that keeps up to 10 public
 // repositories in the host's store, shows their latest GitHub releases in its
 // panel and posts them into the open conversation. It talks only to
-// api.github.com, without a token, so it fetches at most every 2 minutes and
-// says when GitHub refuses.
+// api.github.com, with the GitHub token from its settings when the user saved
+// one, fetches at most every 2 minutes and says when GitHub refuses.
 
 import {
   definePlugin,
@@ -12,7 +12,14 @@ import {
   type Host,
 } from "@rim-platform/plugin-sdk";
 
-import { fetchReleases, GitHubError, normalizeRepo, type Release } from "./github.ts";
+import {
+  fetchReleases,
+  GitHubError,
+  normalizeRepo,
+  TOKEN_SETTING_PLACE,
+  type Credentials,
+  type Release,
+} from "./github.ts";
 
 export const PLUGIN_ID = "chat.rim.releases";
 export const PANEL_ID = "releases";
@@ -22,6 +29,10 @@ export const REFRESH_FLOOR_MS = 2 * 60 * 1000;
 /** The longest text of the line under a posted release's title. */
 export const MAX_SUMMARY_LENGTH = 200;
 const STORAGE_KEY = "repos";
+/** The `key` of the secret token setting in `rim-plugin.json`. */
+export const TOKEN_SETTING = "github_token";
+/** What a token can hold: visible ASCII, as an HTTP header value takes it. */
+const TOKEN = /^[\x21-\x7e]{1,1024}$/;
 /** The list a person starts with until they save one of their own: the project's repositories. */
 export const DEFAULT_REPOS: readonly string[] = [
   "rim-platform/rim-ui",
@@ -102,6 +113,17 @@ function postFailure(error: unknown, posted: number): PluginError {
   return new PluginError(posted > 0 ? `${text} ${posted} posted before it.` : text, { code });
 }
 
+/** Whether `error` is the host saying it cannot read a saved secret setting. */
+function secretsLocked(error: unknown): boolean {
+  return (
+    error instanceof HostRequestError &&
+    error.code === ErrorCode.INTERNAL_ERROR &&
+    typeof error.data === "object" &&
+    error.data !== null &&
+    (error.data as { reason?: unknown }).reason === "secretsLocked"
+  );
+}
+
 /** The open conversation the host added to a command's arguments, and its thread. */
 function conversationOf(args: Readonly<Record<string, unknown>>): {
   conversationId: string;
@@ -128,7 +150,15 @@ export function createPlugin(options: PluginOptions = {}) {
   let repos: RepoState[] = [];
   let signedIn = false;
   let fetchedAt: number | null = null;
+  // The GitHub token from the settings, or null; `tokenLocked` while the host
+  // could not read it. `fetchedWith` is the token the last fetch of the list used.
+  let token: string | null = null;
+  let tokenLocked = false;
+  let fetchedWith: string | null = null;
+  // GitHub's hourly limit counts per token, and without one per address: a refusal
+  // holds back only the token it came for.
   let rateLimitedUntil = 0;
+  let rateLimitedFor: string | null = null;
   let loading = false;
   let notice: string | null = null;
   let panelDenied = false;
@@ -146,6 +176,41 @@ export function createPlugin(options: PluginOptions = {}) {
     notice,
     signedIn,
   });
+
+  const credentials = (): Credentials =>
+    token !== null ? { kind: "token", token } : { kind: tokenLocked ? "locked" : "none" };
+
+  const rateLimited = (): boolean => now() < rateLimitedUntil && rateLimitedFor === token;
+
+  /** Take the token from a settings set; a value that is no token counts as unset. */
+  function applySettings(values: Readonly<Record<string, unknown>>, host: Host): void {
+    const saved = values[TOKEN_SETTING];
+    const trimmed = typeof saved === "string" ? saved.trim() : "";
+    token = TOKEN.test(trimmed) ? trimmed : null;
+    if (trimmed !== "" && token === null) {
+      host.log.warn("the GitHub token setting is not a token GitHub takes; asking without one");
+    }
+  }
+
+  /** Read the settings now; without them the plugin asks GitHub without a token. */
+  async function readSettings(host: Host): Promise<void> {
+    try {
+      const values = await host.settings.get();
+      tokenLocked = false;
+      applySettings(values, host);
+    } catch (error) {
+      token = null;
+      tokenLocked = secretsLocked(error);
+      // A host from before settings has none to give.
+      const unsupported =
+        error instanceof HostRequestError && error.code === ErrorCode.METHOD_NOT_FOUND;
+      if (tokenLocked) {
+        host.log.warn("the GitHub token could not be read: the app's secret vault is locked");
+      } else if (!unsupported) {
+        host.log.warn(`could not read the settings: ${(error as Error).message}`);
+      }
+    }
+  }
 
   const latest = (): LatestRelease[] =>
     repos.map((r) => ({ repo: r.repo, release: r.releases[0] ?? null, error: r.error }));
@@ -172,6 +237,7 @@ export function createPlugin(options: PluginOptions = {}) {
     signedIn = host.principal !== null;
     fetchedAt = null;
     notice = null;
+    await readSettings(host);
     if (!signedIn) {
       repos = [];
       return;
@@ -195,19 +261,28 @@ export function createPlugin(options: PluginOptions = {}) {
     );
   }
 
-  /** Fetch `targets`, stopping at the first refusal of the hourly limit. */
+  /**
+   * Fetch `targets`, stopping at the first refusal that holds for every repository:
+   * the hourly limit, or a rejected token.
+   */
   async function fetchRepos(host: Host, targets: RepoState[]): Promise<void> {
-    if (now() < rateLimitedUntil) return;
+    if (rateLimited()) return;
     loading = true;
     await publish(host);
+    const asked = credentials();
     for (const target of targets) {
       try {
-        target.releases = await fetchReleases(target.repo, fetchImpl);
+        target.releases = await fetchReleases(target.repo, fetchImpl, asked);
         target.error = null;
       } catch (error) {
         const refusal = error instanceof GitHubError ? error : new GitHubError(String(error));
         if (refusal.rateLimitedUntil !== null) {
           rateLimitedUntil = refusal.rateLimitedUntil;
+          rateLimitedFor = asked.kind === "token" ? asked.token : null;
+          notice = refusal.message;
+          break;
+        }
+        if (refusal.tokenRejected) {
           notice = refusal.message;
           break;
         }
@@ -221,13 +296,16 @@ export function createPlugin(options: PluginOptions = {}) {
   function fetchAll(host: Host): Promise<void> {
     notice = null;
     fetchedAt = now();
+    fetchedWith = token;
     fetching = fetchRepos(host, repos).then(() => publish(host));
     return fetching;
   }
 
   /** Fetch the list unless it was fetched under 2 minutes ago or GitHub said wait. */
   async function ensureFresh(host: Host): Promise<void> {
-    if (repos.length === 0 || now() < rateLimitedUntil) return;
+    // The host sends no change while it cannot read the token, so ask it again.
+    if (tokenLocked) await readSettings(host);
+    if (repos.length === 0 || rateLimited()) return;
     if (fetchedAt !== null && now() - fetchedAt < REFRESH_FLOOR_MS) {
       await fetching;
       return;
@@ -237,18 +315,21 @@ export function createPlugin(options: PluginOptions = {}) {
 
   /** Fetch every repository, unless the list was fetched under 2 minutes ago or GitHub said wait. */
   async function refresh(host: Host): Promise<string> {
+    if (tokenLocked) await readSettings(host);
     if (repos.length === 0) {
       await publish(host);
       return "No repositories yet: add one in the panel.";
     }
-    if (now() < rateLimitedUntil) {
+    if (rateLimited()) {
       await publish(host);
       return notice ?? "GitHub refused; try again later.";
     }
     if (fetchedAt !== null && now() - fetchedAt < REFRESH_FLOOR_MS) {
       await fetching;
       notice =
-        "Fetched less than 2 minutes ago. GitHub allows 60 requests an hour without a token.";
+        credentials().kind === "none"
+          ? `Fetched less than 2 minutes ago. GitHub allows 60 requests an hour without a token; add one in ${TOKEN_SETTING_PLACE}.`
+          : "Fetched less than 2 minutes ago.";
       await publish(host);
       return notice;
     }
@@ -390,6 +471,16 @@ export function createPlugin(options: PluginOptions = {}) {
       loaded = load(host);
       await loaded;
       await refresh(host);
+    },
+    // The user saved or reset the settings, or another account signed in: a list
+    // fetched with another token is fetched again with this one.
+    async onSettingsChanged(values, host) {
+      tokenLocked = false;
+      applySettings(values, host);
+      await loaded;
+      await fetching;
+      if (fetchedAt === null || fetchedWith === token || repos.length === 0) return;
+      await fetchAll(host);
     },
   });
 }

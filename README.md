@@ -26,12 +26,48 @@ for three permissions:
   does not ask for `chat.write.encrypted`, so in an encrypted DM or group the app refuses and
   the command says so. It does not ask for `chat.read` and never reads your messages.
 
-It uses no token, so it sees public repositories only. GitHub allows 60 requests an hour per
-IP address without one, so the plugin fetches the list when it starts, every 10 minutes while
-its panel is open, and at most every 2 minutes when you ask; it stops asking and says so when
-GitHub refuses. Your list of repositories is kept in the app's plugin store for your account
-on that device. Until you change it, the list is the four project repositories; a list you
-emptied stays empty.
+Reading its own settings, the optional [GitHub token](#github-token), needs no permission.
+
+GitHub allows 60 requests an hour per IP address without a token, and 5,000 an hour with one,
+so the plugin fetches the list when it starts, every 10 minutes while its panel is open, and at
+most every 2 minutes when you ask; it stops asking and says so when GitHub refuses. Your list
+of repositories is kept in the app's plugin store for your account on that device. Until you
+change it, the list is the four project repositories; a list you emptied stays empty.
+
+## GitHub token
+
+Without a token the plugin shares GitHub's limit of 60 requests an hour with everything else on
+your network address, and a list of 10 repositories uses 10 of them per refresh. When GitHub
+refuses, the panel says until when and suggests adding a token. To add one, on the desktop:
+
+1. On GitHub, open Settings → Developer settings → Personal access tokens → **Fine-grained
+   tokens** → **Generate new token**.
+2. Give it a name and an expiry. Under **Repository access** choose **Public repositories**:
+   that gives read-only access to every public repository, which is all the plugin reads
+   (`GET /repos/{owner}/{repo}/releases`). It needs no permissions beyond that.
+3. Generate it and copy it (`github_pat_…`).
+4. In RIM, open the plugin's settings: **Releases Settings** in the side rail's **Plugins**
+   menu, or **Settings** on its row in Settings → Plugins. Paste the token into **GitHub token**
+   and save. The plugin fetches the list again with it straight away.
+
+A token that can read a private repository (**Only select repositories**, with **Contents**
+set to **Read-only**) lets the plugin show that repository's releases too, and **Post to this
+conversation** posts them into the conversation you run it in.
+
+Where the token goes:
+
+- **On the desktop**, it is kept in the app's secret vault, the encrypted store that holds its
+  other secrets, for your account on this device. It is never synced, never sent to the RIM
+  server, and deleted when you uninstall the plugin. Once saved the form only says it is set,
+  with **Replace** and **Clear**.
+- The plugin sends it only to `api.github.com`, as `Authorization: Bearer`, and never logs,
+  shows or posts it. The panel never receives it.
+- **In the web app** there are no secret settings: the form says the token needs the desktop
+  app, and the plugin asks GitHub without one.
+- While the desktop cannot open its secret vault (a locked system keyring), the plugin asks
+  without the token, and when GitHub refuses it says the token could not be read rather than
+  to add one; it reads the token again on the next refresh. When GitHub rejects the token
+  (expired or revoked), the panel says so; replace it in the same form.
 
 ## What it does
 
