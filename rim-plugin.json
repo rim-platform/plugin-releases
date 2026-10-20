@@ -2,7 +2,7 @@
   "manifest_version": 1,
   "plugin_id": "chat.rim.releases",
   "display_name": "Releases",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "author": "RIM team",
   "runtime_kind": "WebSandboxed",
   "entrypoint": "main.mjs",

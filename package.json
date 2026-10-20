@@ -1,6 +1,6 @@
 {
   "name": "rim-plugin-releases",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "RIM plugin that watches the GitHub releases of public repositories and posts them into a conversation",
   "license": "Apache-2.0",
