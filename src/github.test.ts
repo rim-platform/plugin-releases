@@ -209,7 +209,7 @@ describe("fetchReleases", () => {
     );
     expect(refusal).toMatchObject({
       message:
-        "The GitHub token in this plugin's settings is not valid; paste it again or clear it in the RIM desktop app (the Plugins menu → Releases Settings, or Settings → Plugins).",
+        "The GitHub token in this plugin's settings is not valid; paste it again or clear it in the RIM desktop app (Plugin settings in the Releases panel's header, or Settings → Plugins).",
       tokenRejected: true,
     });
     expect((refusal as GitHubError).message).toBe(INVALID_TOKEN_MESSAGE);
@@ -220,7 +220,7 @@ describe("fetchReleases", () => {
     const refusal = await fetchReleases(REPO, limited().fetch).catch((error: unknown) => error);
     expect(refusal).toBeInstanceOf(GitHubError);
     expect((refusal as GitHubError).message).toBe(
-      `GitHub refused: the 60 requests an hour it allows without a token are used up. Try again after ${at}, or add a GitHub token in this plugin's settings in the RIM desktop app (the Plugins menu → Releases Settings, or Settings → Plugins).`,
+      `GitHub refused: the 60 requests an hour it allows without a token are used up. Try again after ${at}, or add a GitHub token in this plugin's settings in the RIM desktop app (Plugin settings in the Releases panel's header, or Settings → Plugins).`,
     );
     expect((refusal as GitHubError).rateLimitedUntil).toBe(reset);
   });
@@ -248,7 +248,7 @@ describe("fetchReleases", () => {
     );
     expect(refusal).toMatchObject({
       message:
-        "GitHub rejected the token in this plugin's settings: it may have expired or been revoked. Replace it in the RIM desktop app (the Plugins menu → Releases Settings, or Settings → Plugins).",
+        "GitHub rejected the token in this plugin's settings: it may have expired or been revoked. Replace it in the RIM desktop app (Plugin settings in the Releases panel's header, or Settings → Plugins).",
       tokenRejected: true,
       rateLimitedUntil: null,
     });

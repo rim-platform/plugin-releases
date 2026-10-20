@@ -101,7 +101,7 @@ function postFailure(error: unknown, posted: number): PluginError {
   if (error instanceof HostRequestError && error.code === ErrorCode.CAPABILITY_DENIED) {
     text = error.message.includes("encrypted")
       ? "This conversation is encrypted, and the plugin posts only in plaintext conversations."
-      : "Posting needs the Send Chat Messages permission.";
+      : 'Posting needs the "Post as you" permission.';
     code = error.code;
   } else if (error instanceof HostRequestError && error.code === ErrorCode.RATE_LIMITED) {
     text = "The app allows 120 posts a minute; try again shortly.";

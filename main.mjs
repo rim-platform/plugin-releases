@@ -876,7 +876,7 @@ var GitHubError = class extends Error {
     this.tokenRejected = tokenRejected;
   }
 };
-var SETTINGS_PATH = "the Plugins menu \u2192 Releases Settings, or Settings \u2192 Plugins";
+var SETTINGS_PATH = "Plugin settings in the Releases panel's header, or Settings \u2192 Plugins";
 var TOKEN_SETTING_PLACE = `this plugin's settings in the RIM desktop app (${SETTINGS_PATH})`;
 var INVALID_TOKEN_MESSAGE = `The GitHub token in this plugin's settings is not valid; paste it again or clear it in the RIM desktop app (${SETTINGS_PATH}).`;
 function rateLimitMessage(credentials, at) {
@@ -1007,7 +1007,7 @@ function postFailure(error, posted) {
   let text;
   let code = ErrorCode.PLUGIN_ERROR;
   if (error instanceof HostRequestError && error.code === ErrorCode.CAPABILITY_DENIED) {
-    text = error.message.includes("encrypted") ? "This conversation is encrypted, and the plugin posts only in plaintext conversations." : "Posting needs the Send Chat Messages permission.";
+    text = error.message.includes("encrypted") ? "This conversation is encrypted, and the plugin posts only in plaintext conversations." : 'Posting needs the "Post as you" permission.';
     code = error.code;
   } else if (error instanceof HostRequestError && error.code === ErrorCode.RATE_LIMITED) {
     text = "The app allows 120 posts a minute; try again shortly.";

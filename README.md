@@ -19,9 +19,9 @@ for three permissions:
 - **Connect to listed sites** (`network.fetch`), so it can send and receive data from
   `api.github.com` (the releases). The frame's content security policy blocks every other
   site.
-- **Send Chat Messages** (`chat.write`), so **Releases: Post to this conversation** can post
-  the releases. The app says it as "Post as you: this plugin sends messages in your name,
-  except in encrypted DMs and groups." The plugin posts only when you run that command, only
+- **Post as you** (`chat.write`): "this plugin sends messages in your name, except in
+  encrypted DMs and groups." It lets **Releases: Post to this conversation** post the
+  releases. The plugin posts only when you run that command, only
   into the conversation (or thread) open at the time, and only in plaintext conversations: it
   does not ask for `chat.write.encrypted`, so in an encrypted DM or group the app refuses and
   the command says so. It does not ask for `chat.read` and never reads your messages.
@@ -54,9 +54,9 @@ To add one, on the desktop:
    repositories (read-only)**: that is all the plugin reads
    (`GET /repos/{owner}/{repo}/releases`), and it needs no permissions beyond it.
 3. Generate it and copy it (`github_pat_…`).
-4. In RIM, open the plugin's settings: **Releases Settings** in the side rail's **Plugins**
-   menu, or **Settings** on its row in Settings → Plugins. Paste the token into **GitHub token**
-   and save. The plugin fetches the list again with it straight away.
+4. In RIM, open the plugin's settings: **Plugin settings** in the **Releases** panel's header,
+   **Settings** on its row in Settings → Plugins, or **Plugin settings: Releases** in the
+   command palette. Paste the token into **GitHub token** and save. The plugin fetches the list again with it straight away.
 
 Keep the token public-only. A token with access to private repositories lets the plugin read their
 releases too, and **Releases: Post to this conversation** would then post a private release's
@@ -107,8 +107,9 @@ following one would navigate the panel's frame, which closes it.
 
 ## Install
 
-Each way ends the same: RIM shows the plugin and its permissions, you approve them, enable the
-plugin and open **Releases** from the side rail.
+Each way ends the same: RIM shows the plugin and its permissions, **Approve and turn on**
+grants the ones you leave ticked and starts the plugin, and **Releases** in the side rail's
+**Plugins** menu, or **Open Releases** in the command palette, opens its panel.
 
 - **Install from git URL** (desktop): Settings → Plugins → Install from git URL, with
   `https://github.com/rim-platform/plugin-releases.git`. The desktop takes
@@ -118,9 +119,9 @@ plugin and open **Releases** from the side rail.
   link a [release](https://github.com/rim-platform/plugin-releases/releases) gives:
   `https://github.com/rim-platform/plugin-releases/releases/download/v<version>/chat.rim.releases-<version>.rimbundle#sha256=<hash>`.
   The app checks that the bundle hashes to the value after `#sha256=` before it installs
-  anything. Install from link with a GitHub release asset works on the desktop
-  once it fetches links natively (a rim-ui issue); in the browser, install from a workspace
-  registry or from a host that sends CORS headers.
+  anything. The desktop app fetches the link itself, so a release link installs there. GitHub
+  serves release assets without CORS headers, so the web app cannot fetch them: in the
+  browser, install from a workspace registry or from a host that sends CORS headers.
 - **Workspace registry**: when a workspace recommends or requires the plugin, the command
   palette's "Workspace plugins" offers it with its publisher's signature, and a required one
   is offered when the workspace opens. The app verifies the signed statement before it

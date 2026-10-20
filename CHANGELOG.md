@@ -38,6 +38,8 @@ the version in `rim-plugin.json` and in `package.json`.
 
 - A repository named `.` or `..`, such as `owner/..`, is refused instead of being asked for at
   another GitHub path.
+- A post refused for want of permission names the permission as the app's prompt does, **Post
+  as you**, instead of "Send Chat Messages".
 
 ## [0.0.1] - 2026-10-16
 
