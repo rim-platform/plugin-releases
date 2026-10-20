@@ -65,7 +65,7 @@ export class GitHubError extends Error {
 }
 
 /** Where the plugin's settings open in the desktop app. */
-const SETTINGS_PATH = "the Plugins menu → Releases Settings, or Settings → Plugins";
+const SETTINGS_PATH = "Plugin settings in the Releases panel's header, or Settings → Plugins";
 
 /** Where the user saves the token, as the refusals name it. */
 export const TOKEN_SETTING_PLACE = `this plugin's settings in the RIM desktop app (${SETTINGS_PATH})`;

@@ -242,7 +242,7 @@ describe("releases plugin", () => {
     const t = await started({ stored: ["rim-platform/rim-ui"] });
     const early = await t.host.execute("refresh");
     expect(early.result?.message).toBe(
-      "Fetched less than 2 minutes ago. GitHub allows 60 requests an hour without a token; add one in this plugin's settings in the RIM desktop app (the Plugins menu → Releases Settings, or Settings → Plugins).",
+      "Fetched less than 2 minutes ago. GitHub allows 60 requests an hour without a token; add one in this plugin's settings in the RIM desktop app (Plugin settings in the Releases panel's header, or Settings → Plugins).",
     );
     expect(t.panel().notice).toBe(early.result?.message);
     expect(t.github.requests).toHaveLength(1);
@@ -261,7 +261,7 @@ describe("releases plugin", () => {
     await t.host.handshake();
     await until(() => typeof t.panel()?.notice === "string");
     expect(t.panel().notice).toMatch(
-      /^GitHub refused: the 60 requests an hour it allows without a token are used up\. Try again after \d\d:\d\d, or add a GitHub token in this plugin's settings in the RIM desktop app \(the Plugins menu → Releases Settings, or Settings → Plugins\)\.$/,
+      /^GitHub refused: the 60 requests an hour it allows without a token are used up\. Try again after \d\d:\d\d, or add a GitHub token in this plugin's settings in the RIM desktop app \(Plugin settings in the Releases panel's header, or Settings → Plugins\)\.$/,
     );
     expect(t.github.requests).toHaveLength(1);
     t.clock.now += REFRESH_FLOOR_MS;
@@ -410,7 +410,7 @@ describe("releases plugin", () => {
     const denied = await started({ granted: ["ui.panel", "network.fetch"] });
     expect((await denied.host.execute("releases.post", CONVERSATION)).error).toEqual({
       code: -32000,
-      message: "Posting needs the Send Chat Messages permission.",
+      message: 'Posting needs the "Post as you" permission.',
     });
     await denied.host.shutdown();
 
@@ -587,7 +587,7 @@ describe("releases plugin", () => {
       await t.host.handshake();
       await until(() => typeof t.panel()?.notice === "string" && !t.panel().loading);
       const rejected =
-        "GitHub rejected the token in this plugin's settings: it may have expired or been revoked. Replace it in the RIM desktop app (the Plugins menu → Releases Settings, or Settings → Plugins).";
+        "GitHub rejected the token in this plugin's settings: it may have expired or been revoked. Replace it in the RIM desktop app (Plugin settings in the Releases panel's header, or Settings → Plugins).";
       expect(t.panel().notice).toBe(rejected);
       expect(t.github.requests).toHaveLength(1);
       expect(t.panel().repos.every((r) => r.error === null && r.releases.length === 0)).toBe(true);
