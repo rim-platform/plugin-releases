@@ -56,7 +56,8 @@ To add one, on the desktop:
 3. Generate it and copy it (`github_pat_…`).
 4. In RIM, open the plugin's settings: **Plugin settings** in the **Releases** panel's header,
    **Settings** on its row in Settings → Plugins, or **Plugin settings: Releases** in the
-   command palette. Paste the token into **GitHub token** and save. The plugin fetches the list again with it straight away.
+   command palette. Paste the token into **GitHub token** and save. The plugin fetches the
+   list again with it straight away.
 
 Keep the token public-only. A token with access to private repositories lets the plugin read their
 releases too, and **Releases: Post to this conversation** would then post a private release's
