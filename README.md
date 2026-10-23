@@ -120,9 +120,10 @@ grants the ones you leave ticked and starts the plugin, and **Releases** in the 
   link a [release](https://github.com/rim-platform/plugin-releases/releases) gives:
   `https://github.com/rim-platform/plugin-releases/releases/download/v<version>/chat.rim.releases-<version>.rimbundle#sha256=<hash>`.
   The app checks that the bundle hashes to the value after `#sha256=` before it installs
-  anything. The desktop app fetches the link itself, so a release link installs there. GitHub
-  serves release assets without CORS headers, so the web app cannot fetch them: in the
-  browser, install from a workspace registry or from a host that sends CORS headers.
+  anything. The desktop app fetches external links through its host. The browser fetches
+  them through its RIM server, so GitHub release links work without CORS headers. This needs
+  an updated RIM client and server with `plugin_link_fetch` enabled; it is independent of
+  `workspace_plugins`. An older server must be updated to install external links in the browser.
 - **Workspace registry**: when a workspace recommends or requires the plugin, the command
   palette's "Workspace plugins" offers it with its publisher's signature, and a required one
   is offered when the workspace opens. The app verifies the signed statement before it
