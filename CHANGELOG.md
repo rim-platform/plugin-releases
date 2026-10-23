@@ -19,6 +19,10 @@ the version in `rim-plugin.json` and in `package.json`.
 
 ## [Unreleased]
 
+### Fixed
+
+- Document browser installation of pinned release links through an updated RIM server.
+
 ## [0.0.2] - 2026-10-20
 
 ### Added
