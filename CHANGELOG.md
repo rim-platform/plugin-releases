@@ -19,6 +19,11 @@ the version in `rim-plugin.json` and in `package.json`.
 
 ## [Unreleased]
 
+### Security
+
+- A release name, tag or link containing `@here`, `@channel` or `@everyone` no longer notifies the
+  whole conversation when the release is posted.
+
 ### Fixed
 
 - Document browser installation of pinned release links through an updated RIM server.

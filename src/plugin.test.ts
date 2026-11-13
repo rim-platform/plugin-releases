@@ -11,6 +11,7 @@ import {
   DEFAULT_REPOS,
   MAX_REPOS,
   PANEL_ID,
+  releaseMessage,
   REFRESH_FLOOR_MS,
   TOKEN_SETTING,
   UNREADABLE_RELEASES_MESSAGE,
@@ -201,6 +202,24 @@ async function started(options: StartOptions = {}) {
   await until(() => t.panels.some((p) => !p.loading && p.fetchedAt !== null));
   return t;
 }
+
+describe("releaseMessage", () => {
+  it("breaks channel-wide mentions in the name, the tag and the link", () => {
+    const text = releaseMessage("o/repo", {
+      tag: "@channel",
+      version: "@channel",
+      name: "@here and @Everyone",
+      firstLine: "",
+      url: "https://github.com/o/repo/releases/tag/@channel",
+      publishedAt: "",
+      prerelease: false,
+    });
+    expect(text).not.toMatch(/@(here|channel|everyone)/i);
+    expect(text).toContain("@\u200bchannel is out");
+    expect(text).toContain("@\u200bhere and @\u200bEveryone");
+    expect(text).toContain("/tag/%40channel");
+  });
+});
 
 describe("releases plugin", () => {
   it("has a manifest the host installs once bundled", () => {
