@@ -79,19 +79,24 @@ function clip(text: string, max: number): string {
   return chars.length <= max ? text : `${chars.slice(0, max - 1).join("")}…`;
 }
 
+/** `text` with `@here`, `@channel` and `@everyone` broken so they notify nobody. */
+function defang(text: string): string {
+  return text.replace(/<@/g, "< @").replace(/@(here|channel|everyone)/gi, "@\u200b$1");
+}
+
 /** The line under the title: the release's name, else the first line of its notes. */
 function summaryOf(release: Release): string {
   const named = release.name && release.name !== release.tag && release.name !== release.version;
-  // A `<@…>` token in GitHub's text would mention someone in the conversation.
-  return clip((named ? release.name : release.firstLine).replace(/<@/g, "< @"), MAX_SUMMARY_LENGTH);
+  return clip(defang(named ? release.name : release.firstLine), MAX_SUMMARY_LENGTH);
 }
 
 /** The plain-text message that announces `release` of `repo`. */
 export function releaseMessage(repo: string, release: Release): string {
   const name = repo.slice(repo.indexOf("/") + 1);
-  const title = `🚀 ${name} ${release.version} is out${release.prerelease ? " (pre-release)" : ""}`;
+  const title = `🚀 ${defang(name)} ${defang(release.version)} is out${release.prerelease ? " (pre-release)" : ""}`;
   const summary = summaryOf(release);
-  return [title, ...(summary ? [summary] : []), release.url].join("\n");
+  const url = release.url.replace(/@(?=here|channel|everyone)/gi, "%40");
+  return [title, ...(summary ? [summary] : []), url].join("\n");
 }
 
 /** A failed post as the person reads it, after `posted` messages went out. */

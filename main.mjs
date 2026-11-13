@@ -993,15 +993,19 @@ function clip(text, max) {
   const chars = Array.from(text);
   return chars.length <= max ? text : `${chars.slice(0, max - 1).join("")}\u2026`;
 }
+function defang(text) {
+  return text.replace(/<@/g, "< @").replace(/@(here|channel|everyone)/gi, "@\u200B$1");
+}
 function summaryOf(release) {
   const named = release.name && release.name !== release.tag && release.name !== release.version;
-  return clip((named ? release.name : release.firstLine).replace(/<@/g, "< @"), MAX_SUMMARY_LENGTH);
+  return clip(defang(named ? release.name : release.firstLine), MAX_SUMMARY_LENGTH);
 }
 function releaseMessage(repo, release) {
   const name = repo.slice(repo.indexOf("/") + 1);
-  const title = `\u{1F680} ${name} ${release.version} is out${release.prerelease ? " (pre-release)" : ""}`;
+  const title = `\u{1F680} ${defang(name)} ${defang(release.version)} is out${release.prerelease ? " (pre-release)" : ""}`;
   const summary = summaryOf(release);
-  return [title, ...summary ? [summary] : [], release.url].join("\n");
+  const url = release.url.replace(/@(?=here|channel|everyone)/gi, "%40");
+  return [title, ...summary ? [summary] : [], url].join("\n");
 }
 function postFailure(error, posted) {
   let text;
